@@ -1,5 +1,5 @@
-from extract import ExtractStock
-from load import LoadData
+from Code.extract import ExtractStock
+from Code.load import LoadData
 
 if __name__ == "__main__":
     ext = ExtractStock()
