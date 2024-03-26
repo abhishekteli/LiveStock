@@ -1,5 +1,5 @@
 import requests, logging, os, json
-from datetime import date
+from datetime import date, datetime
 from dotenv import load_dotenv
 from confluent_kafka import Producer
 
@@ -12,11 +12,12 @@ class ExtractStock:
         self.basedir = (f"/Users/abhishekteli/Documents/Projects/StockDataAnalysis/RawData/year={date.today().year}/"
                         f"month={date.today().month}/day={date.today().day}/")
         self.config = {
-            'bootstrap.servers': 'localhost',
+            'bootstrap.servers': 'localhost:9092',
             'auto.offset.reset': 'earliest'
         }
         self.producer = Producer(self.config)
-        self.topic = 'liveStock'
+        self.topic_gainers = 'Gainers'
+        self.topic_losers = 'Losers'
 
         load_dotenv()
 
@@ -31,8 +32,13 @@ class ExtractStock:
             response = requests.get(url, headers=headers, params=querystring)
 
             data = response.json()['data']
-            self.producer.produce(self.topic, json.dumps(data).encode('utf-8'))
-            self.producer.flush()
+            if not data['trends']:
+                print('Market is Closed', end='')
+            else:
+                self.producer.produce(self.topic_gainers,
+                                      key=trend_type.encode('utf-8'),
+                                      value=json.dumps(data).encode('utf-8'))
+                self.producer.flush()
 
         except requests.exceptions.RequestException as req_err:
             logging.error(f'Request error occured: {req_err}')
@@ -42,5 +48,5 @@ class ExtractStock:
             logging.error(f'An unexcepted error occured: {e}')
 
     def processData(self, trend_type):
-        st = ExtractStock()
-        st.getRawData(trend_type)
+        self.getRawData(trend_type)
+
