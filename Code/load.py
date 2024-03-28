@@ -3,6 +3,7 @@ from dotenv import load_dotenv
 from pyspark.sql import SparkSession
 from pyspark.sql.types import *
 from pyspark.sql.functions import *
+from Code.transform import TransformData
 import json
 
 
@@ -36,11 +37,11 @@ class LoadData:
             StructField("pre_or_post_market", FloatType(), True),
             StructField("pre_or_post_market_change", FloatType(), True),
             StructField("pre_or_pos_market_change_percent", FloatType(), True),
-            StructField("last_update_utc", TimestampType(), False),
+            StructField("last_update_utc", TimestampType(), True),
             StructField("currency", StringType(), True),
             StructField("exchange", StringType(), True),
-            StructField("exchange_open", TimestampType(), False),
-            StructField("exchange_close", TimestampType(), False),
+            StructField("exchange_open", TimestampType(), True),
+            StructField("exchange_close", TimestampType(), True),
             StructField("timezone", StringType(), True),
             StructField("utc_offset_sec", IntegerType(), True),
             StructField("country_code", StringType(), True),
@@ -55,7 +56,7 @@ class LoadData:
             .format("kafka")
             .option("kafka.bootstrap.servers", f"{self.config['bootstrap.server']}")
             .option("subscribe", f"{self.config['topic']}")
-            .option("startingOffsets", "latest")
+            .option("startingOffsets", "earliest")
             .load()
         )
 
@@ -66,7 +67,7 @@ class LoadData:
         return exploded_df
 
     def saveToDatabase(self, result_df, batch_id):
-        url = 'jdbc:postgresql://localhost:5432/RealStockData'
+        url = 'jdbc:postgresql://localhost:5432/realstockdata'
         properties = {
             "user": os.getenv('USERNAME'),
             "password": os.getenv('DATABASE_PASSWORD'),
@@ -89,7 +90,9 @@ class LoadData:
         return sQuery
 
     def process(self):
+        tr = TransformData()
         kafka_df = self.readData()
         parsed_df = self.getStockData(kafka_df)
-        sQuery = self.writeToDatabase(parsed_df)
+        stockData_df = tr.process(parsed_df)
+        sQuery = self.writeToDatabase(stockData_df)
         return sQuery

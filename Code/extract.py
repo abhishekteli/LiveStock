@@ -31,8 +31,8 @@ class ExtractStock:
             }
             response = requests.get(url, headers=headers, params=querystring)
 
-            data = response.json()['data']
-            if not data['trends']:
+            data = response.json()['data']['trends']
+            if not data:
                 print('Market is Closed', end='')
             else:
                 self.producer.produce(self.topic_gainers,
