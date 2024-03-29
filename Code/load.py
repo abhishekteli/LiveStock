@@ -4,17 +4,24 @@ from pyspark.sql import SparkSession
 from pyspark.sql.types import *
 from pyspark.sql.functions import *
 from Code.transform import TransformData
-import json
 
 
 class LoadData:
-    def __init__(self):
+    def __init__(self, trend_type):
         load_dotenv()
-        self.config = {
-            'bootstrap.server': 'localhost:9092',
-            'auto.offset.reset': 'earliest',
-            'topic': 'Gainers'
-        }
+        self.basedir = "/Users/abhishekteli/Documents/Projects/StockDataAnalysis/checkpoint/"
+        self.trend_type = trend_type
+        self.bootstrap_server = 'localhost:9092'
+
+        #--------------------------------#
+        if self.trend_type == "GAINERS":
+            self.topic = 'Gainers'
+        elif self.trend_type == 'LOSERS':
+            self.topic = 'Losers'
+        else:
+            self.topic = 'Active'
+        #--------------------------------#
+
         self.spark = (SparkSession.builder
                       .master('local[3]')
                       .appName('RealStockData')
@@ -22,7 +29,15 @@ class LoadData:
                                                      "org.postgresql:postgresql:42.2.5")
                       .getOrCreate()
                       )
-        self.checkpnt = f"/Users/abhishekteli/Documents/Projects/StockDataAnalysis/checkpoint/"
+        #--------------------------------------------#
+        if self.trend_type == "GAINERS":
+            self.checkpnt = f"{self.basedir}/Gainers/"
+        elif self.trend_type == "LOSERS":
+            self.checkpnt = f"{self.basedir}/Losers/"
+        else:
+            self.checkpnt = f"{self.basedir}/Active/"
+        #--------------------------------------------#
+
         self.spark.sparkContext.setLogLevel('Error')
 
     def getSchema(self):
@@ -54,16 +69,17 @@ class LoadData:
         return (
             self.spark.readStream
             .format("kafka")
-            .option("kafka.bootstrap.servers", f"{self.config['bootstrap.server']}")
-            .option("subscribe", f"{self.config['topic']}")
+            .option("kafka.bootstrap.servers", f"{self.bootstrap_server}")
+            .option("subscribe", f"{self.topic}")
             .option("startingOffsets", "earliest")
             .load()
         )
 
     def getStockData(self, kafka_df):
         schema = self.getSchema()
-        json_df = kafka_df.withColumn("json_array", from_json(col("value").cast("string"), ArrayType(schema)))
-        exploded_df = json_df.withColumn("data", explode(col("json_array"))).select("data.*")
+        json_df = kafka_df.withColumn("json_array", from_json(col("value").cast("string"), ArrayType(schema))) \
+            .withColumn("status", col('key').cast("string"))
+        exploded_df = json_df.withColumn("data", explode(col("json_array"))).select("data.*", "status")
         return exploded_df
 
     def saveToDatabase(self, result_df, batch_id):
@@ -74,7 +90,7 @@ class LoadData:
             "driver": 'org.postgresql.Driver'
         }
         try:
-            result_df.write.jdbc(url=url, table='gainers', mode='append', properties=properties)
+            result_df.write.jdbc(url=url, table='stock', mode='append', properties=properties)
         except Exception as e:
             print(' ')
 
